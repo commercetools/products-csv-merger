@@ -1,0 +1,9 @@
+[package]
+name = "products-merger"
+version = "0.1.0"
+authors = ["Yann Simon <yann.simon@commercetools.de>"]
+
+[dependencies]
+csv = "1.0.0-beta.3"
+difference = "1.0"
+term = "0.2.7"
