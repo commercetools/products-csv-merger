@@ -16,19 +16,30 @@ $ cargo run -- <master.csv> <partner.csv> <result.csv>
 
 (once) Install [cargo watch](https://github.com/passcod/cargo-watch)
 ```
-cargo install cargo-watch
+$ cargo install cargo-watch
 ```
 
 (each time)
 ```
-cargo watch
+$ cargo watch
 ```
 
+### code formatting
+
+(once) install [rustfmt](https://github.com/rust-lang-nursery/rustfmt)
+```
+$ cargo install rustfmt
+```
+
+(each time)
+```
+$ cargo fmt
+```
 
 ## release
 
 ```
-cargo build --release
+$ cargo build --release
 ```
 
 ### cross-compilation to windows
@@ -41,5 +52,5 @@ $ cargo install cross
 
 Then:
 ```
-cross build --release --target x86_64-pc-windows-gnu
+$ cross build --release --target x86_64-pc-windows-gnu
 ```
