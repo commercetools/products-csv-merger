@@ -115,7 +115,10 @@ fn run() -> Result<(), Box<Error>> {
     let p: HashSet<_> = partner_headers.iter().map(String::from).collect();
     println!();
     println!("structural differences:");
-    display_diff(&format!("master: {:?}", m.difference(&p)), &format!("partner: {:?}", p.difference(&m)));
+    display_diff(
+        &format!("master: {:?}", m.difference(&p)),
+        &format!("partner: {:?}", p.difference(&m)),
+    );
     println!();
 
     let mut all_records = master_rdr.into_records().take(2);
@@ -123,10 +126,13 @@ fn run() -> Result<(), Box<Error>> {
     let absent = String::from("<absent>");
 
     while let Some(master_variant) = all_records.next() {
-        let master_record = to_record(&master_headers, &master_variant.unwrap());
+        let master_variant = master_variant.unwrap();
+        let master_record = to_record(&master_headers, &master_variant);
+        wtr.write_record(&master_variant).unwrap();
 
         while let Some(variant) = all_records.next() {
-            let variant_record = to_record(&master_headers, &variant.unwrap());
+            let variant = variant.unwrap();
+            let variant_record = to_record(&master_headers, &variant);
 
             if let Some(sku) = variant_record.get("sku") {
                 if let Some(partner) = partner_records.get(sku) {
@@ -162,6 +168,9 @@ fn run() -> Result<(), Box<Error>> {
                     }
                 }
             }
+
+            // TODO: write modified variant?
+            wtr.write_record(&variant).unwrap();
         }
     }
 
