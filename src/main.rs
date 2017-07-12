@@ -85,6 +85,7 @@ fn run() -> Result<(), Box<Error>> {
         partner_file,
     );
 
+    // put all partners records into memory (HashMap sku -> field key -> field value)
     let partner_headers = partner_rdr.headers()?.clone();
     let partner_records: HashMap<String, Record> = partner_rdr
         .into_records()
@@ -127,12 +128,12 @@ fn run() -> Result<(), Box<Error>> {
     let absent = String::from("<absent>");
 
     while let Some(master_variant) = all_records.next() {
-        let master_variant = master_variant.unwrap();
+        let master_variant = master_variant?;
         let master_record = to_record(&master_headers, &master_variant);
         wtr.write_record(&master_variant)?;
 
         while let Some(variant) = all_records.next() {
-            let variant = variant.unwrap();
+            let variant = variant?;
             let variant_record = to_record(&master_headers, &variant);
 
             if let Some(sku) = variant_record.get("sku") {
