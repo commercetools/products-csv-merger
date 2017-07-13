@@ -184,8 +184,8 @@ fn run() -> Result<(), Box<Error>> {
                                         sku,
                                         name
                                     );
-//                                    println!("Master project  : {}", &master_value);
-//                                    println!("Partner project : {}", &partner_value);
+                                    // println!("Master project  : {}", &master_value);
+                                    // println!("Partner project : {}", &partner_value);
                                     display_diff(master_value, partner_value)?;
                                     println!();
                                 }
