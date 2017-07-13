@@ -75,6 +75,21 @@ fn display_diff(text1: &str, text2: &str) -> io::Result<()> {
     t.flush()
 }
 
+
+// key to compare if:
+// - name.de (to be discussed as only set on product)
+// - custom attributes (CamelCase) except the ones set on master
+fn should_compare_key(key: &str) -> bool {
+    //    key == "name.de" ||
+    (key.chars().next().unwrap().is_uppercase() && key != "ConsiderForSearch" &&
+         key != "ContentDescription" && key != "PartnerProduct" && key != "PartnerShop" &&
+         key != "PartnerShops" &&
+         key != "QAValidation" && key != "QAValidationMessage" &&
+         key != "RedaktionellerContent" &&
+         key != "Validation" &&
+         key != "ValidationMessage" && key != "ValidationException")
+}
+
 fn run() -> Result<(), Box<Error>> {
     let result_file_path = get_arg(3)?;
     let partner_file_path = get_arg(2)?;
@@ -96,6 +111,13 @@ fn run() -> Result<(), Box<Error>> {
             // copy the 'msku' field into 'sku' as it is the master sku, used to identify product
             let sku = record.get("msku").expect("msku column not found").clone();
             record.insert(String::from("sku"), sku.clone());
+
+            let name_exists = record.get("name.de").is_some();
+            if name_exists {
+                let name = record.get("name.de").unwrap().clone();
+                record.insert(String::from("PartnerDescription.de"), name);
+            }
+
             (sku, record)
         })
         .collect();
@@ -123,56 +145,58 @@ fn run() -> Result<(), Box<Error>> {
     )?;
     println!();
 
-    let mut all_records = master_rdr.into_records().take(2);
+    let mut all_records = master_rdr.into_records();
     let unknown = String::from("<unknown>");
-    let absent = String::from("<absent>");
+    let empty_string = String::from("");
 
-    while let Some(master_variant) = all_records.next() {
+    // first one is a master variant
+    if let Some(master_variant) = all_records.next() {
         let master_variant = master_variant?;
-        let master_record = to_record(&master_headers, &master_variant);
-        wtr.write_record(&master_variant)?;
+
+        // keep track of the last master_record
+        let mut master_record: Record = to_record(&master_headers, &master_variant);
 
         while let Some(variant) = all_records.next() {
             let variant = variant?;
             let variant_record = to_record(&master_headers, &variant);
 
-            if let Some(sku) = variant_record.get("sku") {
-                if let Some(partner) = partner_records.get(sku) {
-                    for key in master_record.keys() {
-                        if
-                        //key.chars().next().unwrap().is_uppercase() &&
-                        variant_record.get(key) != partner.get(key) {
-                            println!(
-                                "Key '{}' on product '{}' with name '{}'",
-                                key,
-                                sku,
-                                master_record.get("name.de").unwrap_or(&unknown)
-                            );
-                            println!(
-                                "Master project - master variant : {}",
-                                &master_record.get(key).unwrap_or(&absent)
-                            );
-                            println!(
-                                "Master project - first variant  : {}",
-                                &variant_record.get(key).unwrap_or(&absent)
-                            );
-                            println!(
-                                "Partner project                 : {}",
-                                &partner.get(key).unwrap_or(&absent)
-                            );
-                            if let Some(m) = master_record.get(key) {
-                                if let Some(v) = partner.get(key) {
-                                    display_diff(m, v)?;
+            if !variant_record.get("_published").iter().all(
+                |p| p.is_empty(),
+            )
+            {
+                // master variant
+                master_record = variant_record;
+                wtr.write_record(&variant)?;
+            } else {
+                // variant
+                if let Some(sku) = variant_record.get("sku") {
+                    if let Some(partner) = partner_records.get(sku) {
+                        for key in variant_record.keys() {
+                            if should_compare_key(key) {
+                                let master_value = variant_record.get(key).unwrap_or(&empty_string);
+                                let partner_value = partner.get(key).unwrap_or(&empty_string);
+                                if master_value != partner_value {
+                                    let master_record = master_record.clone();
+                                    let name = master_record.get("name.de").unwrap_or(&unknown);
+                                    println!(
+                                        "# Key '{}' on product '{}' with name '{}'",
+                                        key,
+                                        sku,
+                                        name
+                                    );
+//                                    println!("Master project  : {}", &master_value);
+//                                    println!("Partner project : {}", &partner_value);
+                                    display_diff(master_value, partner_value)?;
+                                    println!();
                                 }
                             }
-                            println!();
                         }
                     }
                 }
-            }
 
-            // TODO: write modified variant?
-            wtr.write_record(&variant)?;
+                // TODO: write modified variant?
+                wtr.write_record(&variant)?;
+            }
         }
     }
 
