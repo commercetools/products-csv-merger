@@ -113,7 +113,7 @@ fn handle_diff<'a>(
                 "failed to read line",
             );
             match Some(&*input) {
-                Some("p") | Some("\n") => return String::from(partner_value),
+                Some("p") | Some("\n") | Some("\r\n") => return String::from(partner_value),
                 Some("m") => return String::from(master_value),
                 Some("e") => {
                     println!("Enter new value:");
