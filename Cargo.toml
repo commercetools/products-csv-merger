@@ -7,3 +7,4 @@ authors = ["Yann Simon <yann.simon@commercetools.de>"]
 csv = "1.0.0-beta.3"
 difference = "1.0"
 term = "0.2.7"
+clap = "2.25"

@@ -1,3 +1,4 @@
+extern crate clap;
 extern crate csv;
 extern crate difference;
 extern crate term;
@@ -6,9 +7,7 @@ use csv::StringRecord;
 use difference::{Difference, Changeset};
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::env;
 use std::error::Error;
-use std::ffi::OsString;
 use std::fs::File;
 use std::io;
 use std::process;
@@ -250,22 +249,30 @@ where
     Ok(())
 }
 
-/// Returns the first positional argument sent to this process. If there are no
-/// positional arguments, then this returns an error.
-fn get_arg(n: usize) -> Result<OsString, Box<Error>> {
-    match env::args_os().nth(n) {
-        None => Err(From::from(
-            format!("expected {} argument(s), but got none", n),
-        )),
-        Some(file_path) => Ok(file_path),
-    }
-}
-
-
 fn main() {
-    let result_file_path = get_arg(3).unwrap();
-    let partner_file_path = get_arg(2).unwrap();
-    let master_file_path = get_arg(1).unwrap();
+    let matches = clap::App::new("products-merger")
+        .version("1.0")
+        .author("Yann Simon <yann.simon@commercetools.com>")
+        .args_from_usage(
+            "<MASTER_FILE> 'CSV export of master project' \n\
+             <PARTNER_FILE> 'CSV export of partner project' \n\
+             <RESULT_FILE> 'result CSV file' \n\
+            --accept-all=[true|false] 'accepts all changes from partner project'",
+        )
+        .get_matches();
+
+    let master_file_path = matches.value_of("MASTER_FILE").unwrap();
+    let partner_file_path = matches.value_of("PARTNER_FILE").unwrap();
+    let result_file_path = matches.value_of("RESULT_FILE").unwrap();
+
+    let accept_all = matches.value_of("accept-all").iter().all(|&a| a == "true");
+    println!(
+        "Merging master export '{}' with partner export '{}' to '{}' (accept-all={})",
+        master_file_path,
+        partner_file_path,
+        result_file_path,
+        accept_all
+    );
 
     let master_file = File::open(master_file_path).unwrap();
     let master_rdr = csv::ReaderBuilder::new().flexible(true).from_reader(
@@ -283,7 +290,7 @@ fn main() {
         .unwrap();
 
 
-    if let Err(err) = run(master_rdr, partner_rdr, &mut wtr, false) {
+    if let Err(err) = run(master_rdr, partner_rdr, &mut wtr, accept_all) {
         println!("{}", err);
         process::exit(1);
     }
