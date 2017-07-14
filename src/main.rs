@@ -81,9 +81,9 @@ fn display_diff(text1: &str, text2: &str) -> io::Result<()> {
 // - custom attributes (CamelCase) except the ones set on master
 fn should_compare_key(key: &str) -> bool {
     //    key == "name.de" ||
-    (key.chars().next().unwrap().is_uppercase() && key != "ConsiderForSearch" &&
-         key != "ContentDescription" && key != "PartnerProduct" && key != "PartnerShop" &&
-         key != "PartnerShops" &&
+    (key.chars().next().iter().any(|c| c.is_uppercase()) && key != "ConsiderForSearch" &&
+         key != "ContentDescription" &&
+         key != "PartnerProduct" && key != "PartnerShop" && key != "PartnerShops" &&
          key != "QAValidation" && key != "QAValidationMessage" &&
          key != "RedaktionellerContent" &&
          key != "Validation" &&
@@ -257,6 +257,34 @@ mod tests {
     use super::*;
     use csv::{Reader, Writer};
 
+    macro_rules! map(
+        { $($key:expr => $value:expr),+ } => {
+            {
+                let mut m = ::std::collections::HashMap::new();
+                $(
+                    m.insert(String::from($key), String::from($value));
+                )+
+                m
+            }
+         };
+    );
+
+    #[test]
+    fn test_should_compare_key() {
+        assert_eq!(should_compare_key("bla"), false);
+        assert_eq!(should_compare_key("Bla"), true);
+        assert_eq!(should_compare_key("ContentDescription"), false);
+        assert_eq!(should_compare_key(""), false);
+    }
+
+    #[test]
+    fn test_is_master() {
+        assert_eq!(is_master(&(map!{ "_published" => "true" })), true);
+        assert_eq!(is_master(&(map!{ "_published" => "false" })), true);
+        assert_eq!(is_master(&(map!{ "_published" => "" })), false);
+        assert_eq!(is_master(&(map!{ "hello" => "" })), false);
+    }
+
     fn test_run(master_data: &str, partner_data: &str, expected: &str) {
         let master = Reader::from_reader(master_data.as_bytes());
         let partner = Reader::from_reader(partner_data.as_bytes());
@@ -320,7 +348,7 @@ false,3,name,ghi
 msku,Att1
 2,bye2
 ";
-        // should we remove "def" or let it?
+        // a missing column is shown as a diff, and therefor remove the master value
         let expected_data = "\
 _published,sku,Att1,Att2
 true,1,hello,abc
