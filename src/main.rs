@@ -164,16 +164,15 @@ where
                 wtr.write_record(&variant)?;
             } else {
                 // variant
-                let mut modified_variant_written = false;
+                let mut modify_variant = false;
                 if let Some(sku) = variant_record.get("sku") {
                     if let Some(partner) = partner_records.get(sku) {
-                        modified_variant_written = true;
+                        modify_variant = true;
                         let mut modified_variant = StringRecord::new();
                         for key in master_headers.iter() {
                             let master_value = variant_record.get(key).unwrap_or(&empty_string);
-                            if !should_compare_key(key) {
-                                modified_variant.push_field(master_value);
-                            } else {
+                            let mut modified_value_written = false;
+                            if should_compare_key(key) {
                                 let partner_value = partner.get(key).unwrap_or(&empty_string);
                                 if master_value != partner_value {
                                     let master_record = master_record.clone();
@@ -191,15 +190,19 @@ where
 
                                     if accept_all_changes {
                                         modified_variant.push_field(partner_value);
+                                        modified_value_written = true
                                     }
                                 }
+                            }
+                            if !modified_value_written {
+                                modified_variant.push_field(master_value);
                             }
                         }
                         wtr.write_record(&modified_variant)?;
                     }
                 }
 
-                if !modified_variant_written {
+                if !modify_variant {
                     wtr.write_record(&variant)?;
                 }
             }
@@ -254,6 +257,15 @@ mod tests {
     use super::*;
     use csv::{Reader, Writer};
 
+    fn test_run(master_data: &str, partner_data: &str, expected: &str) {
+        let master = Reader::from_reader(master_data.as_bytes());
+        let partner = Reader::from_reader(partner_data.as_bytes());
+        let mut result = Writer::from_writer(vec![]);
+        run(master, partner, &mut result, true).unwrap();
+        let data = String::from_utf8(result.into_inner().unwrap()).unwrap();
+        assert_eq!(data, expected);
+    }
+
     #[test]
     fn master_data_is_copied() {
         let master_data = "\
@@ -263,25 +275,13 @@ true,1,hello
 false,3,name
 ,4,name
 ";
-        let partner_data = "";
-        let master = Reader::from_reader(master_data.as_bytes());
-        let partner = Reader::from_reader(partner_data.as_bytes());
-        let mut result = Writer::from_writer(vec![]);
-        run(master, partner, &mut result, true).unwrap();
-        let data = String::from_utf8(result.into_inner().unwrap()).unwrap();
-        assert_eq!(data, master_data);
+        test_run(master_data, "", master_data);
     }
 
     #[test]
     fn do_nothing_if_no_master_data() {
         let master_data = "_published,sku,Att1\n";
-        let partner_data = "";
-        let master = Reader::from_reader(master_data.as_bytes());
-        let partner = Reader::from_reader(partner_data.as_bytes());
-        let mut result = Writer::from_writer(vec![]);
-        run(master, partner, &mut result, true).unwrap();
-        let data = String::from_utf8(result.into_inner().unwrap()).unwrap();
-        assert_eq!(data, master_data);
+        test_run(master_data, "", master_data);
     }
 
     #[test]
@@ -304,11 +304,30 @@ true,1,hello
 false,3,name
 ,4,name
 ";
-        let master = Reader::from_reader(master_data.as_bytes());
-        let partner = Reader::from_reader(partner_data.as_bytes());
-        let mut result = Writer::from_writer(vec![]);
-        run(master, partner, &mut result, true).unwrap();
-        let data = String::from_utf8(result.into_inner().unwrap()).unwrap();
-        assert_eq!(data, expected_data);
+        test_run(master_data, partner_data, expected_data);
+    }
+
+    #[test]
+    fn handle_missing_column() {
+        let master_data = "\
+_published,sku,Att1,Att2
+true,1,hello,abc
+,2,bye,def
+false,3,name,ghi
+,4,name,klm
+";
+        let partner_data = "\
+msku,Att1
+2,bye2
+";
+        // should we remove "def" or let it?
+        let expected_data = "\
+_published,sku,Att1,Att2
+true,1,hello,abc
+,2,bye2,
+false,3,name,ghi
+,4,name,klm
+";
+        test_run(master_data, partner_data, expected_data);
     }
 }
