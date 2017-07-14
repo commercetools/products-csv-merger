@@ -112,8 +112,10 @@ fn handle_diff<'a>(
             io::stdin().read_line(&mut input).expect(
                 "failed to read line",
             );
+            let input = input.replace("\r\n", "");
+            let input = input.replace("\n", "");
             match Some(&*input) {
-                Some("p") | Some("\n") | Some("\r\n") => return String::from(partner_value),
+                Some("p") | Some("") => return String::from(partner_value),
                 Some("m") => return String::from(master_value),
                 Some("e") => {
                     println!("Enter new value:");
