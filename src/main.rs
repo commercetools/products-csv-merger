@@ -155,10 +155,10 @@ where
             let sku = record.get("msku").expect("msku column not found").clone();
             record.insert(String::from("sku"), sku.clone());
 
-            let name_exists = record.get("name.de").is_some();
-            if name_exists {
-                let name = record.get("name.de").unwrap().clone();
-                record.insert(String::from("PartnerDescription.de"), name);
+            let description_exists = record.get("description.de").is_some();
+            if description_exists {
+                let description = record.get("description.de").unwrap().clone();
+                record.insert(String::from("PartnerDescription.de"), description);
             }
 
             (sku, record)
@@ -371,6 +371,29 @@ msku,Att1
 ";
         let expected_data = "\
 _published,sku,Att1
+true,1,hello
+,2,bye2
+false,3,name
+,4,name
+";
+        test_run(master_data, partner_data, expected_data);
+    }
+
+    #[test]
+    fn compare_partner_description() {
+        let master_data = "\
+_published,sku,PartnerDescription.de
+true,1,hello
+,2,bye
+false,3,name
+,4,name
+";
+        let partner_data = "\
+msku,description.de
+2,bye2
+";
+        let expected_data = "\
+_published,sku,PartnerDescription.de
 true,1,hello
 ,2,bye2
 false,3,name
