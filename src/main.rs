@@ -90,15 +90,20 @@ fn should_compare_key(key: &str) -> bool {
          key != "ValidationMessage" && key != "ValidationException")
 }
 
-fn run() -> Result<(), Box<Error>> {
-    let result_file_path = get_arg(3)?;
-    let partner_file_path = get_arg(2)?;
-    let master_file_path = get_arg(1)?;
+fn is_master(r: &Record) -> bool {
+    !r.get("_published").iter().all(|p| p.is_empty())
+}
 
-    let partner_file = File::open(partner_file_path)?;
-    let mut partner_rdr = csv::ReaderBuilder::new().flexible(true).from_reader(
-        partner_file,
-    );
+fn run<R, W>(
+    mut master_rdr: csv::Reader<R>,
+    mut partner_rdr: csv::Reader<R>,
+    wtr: &mut csv::Writer<W>,
+    accept_all_changes: bool,
+) -> Result<(), Box<Error>>
+where
+    R: std::io::Read,
+    W: std::io::Write,
+{
 
     // put all partners records into memory (HashMap sku -> field key -> field value)
     let partner_headers = partner_rdr.headers()?.clone();
@@ -122,18 +127,8 @@ fn run() -> Result<(), Box<Error>> {
         })
         .collect();
 
-    //    println!("{:?}", partner_records.iter().next());
-    let master_file = File::open(master_file_path)?;
-    let mut master_rdr = csv::ReaderBuilder::new().flexible(true).from_reader(
-        master_file,
-    );
-
-    let master_headers = master_rdr.headers()?.clone();
-
-    let mut wtr = csv::WriterBuilder::new().flexible(true).from_path(
-        result_file_path,
-    )?;
-    wtr.write_record(&partner_headers)?;
+    // start reading master data
+    let master_headers = master_rdr.headers().expect("no data in master").clone();
 
     let m: HashSet<_> = master_headers.iter().map(String::from).collect();
     let p: HashSet<_> = partner_headers.iter().map(String::from).collect();
@@ -145,6 +140,8 @@ fn run() -> Result<(), Box<Error>> {
     )?;
     println!();
 
+    wtr.write_record(&master_headers)?;
+
     let mut all_records = master_rdr.into_records();
     let unknown = String::from("<unknown>");
     let empty_string = String::from("");
@@ -155,25 +152,28 @@ fn run() -> Result<(), Box<Error>> {
 
         // keep track of the last master_record
         let mut master_record: Record = to_record(&master_headers, &master_variant);
+        wtr.write_record(&master_variant)?;
 
         while let Some(variant) = all_records.next() {
             let variant = variant?;
             let variant_record = to_record(&master_headers, &variant);
 
-            if !variant_record.get("_published").iter().all(
-                |p| p.is_empty(),
-            )
-            {
+            if is_master(&variant_record) {
                 // master variant
                 master_record = variant_record;
                 wtr.write_record(&variant)?;
             } else {
                 // variant
+                let mut modified_variant_written = false;
                 if let Some(sku) = variant_record.get("sku") {
                     if let Some(partner) = partner_records.get(sku) {
-                        for key in variant_record.keys() {
-                            if should_compare_key(key) {
-                                let master_value = variant_record.get(key).unwrap_or(&empty_string);
+                        modified_variant_written = true;
+                        let mut modified_variant = StringRecord::new();
+                        for key in master_headers.iter() {
+                            let master_value = variant_record.get(key).unwrap_or(&empty_string);
+                            if !should_compare_key(key) {
+                                modified_variant.push_field(master_value);
+                            } else {
                                 let partner_value = partner.get(key).unwrap_or(&empty_string);
                                 if master_value != partner_value {
                                     let master_record = master_record.clone();
@@ -188,14 +188,20 @@ fn run() -> Result<(), Box<Error>> {
                                     // println!("Partner project : {}", &partner_value);
                                     display_diff(master_value, partner_value)?;
                                     println!();
+
+                                    if accept_all_changes {
+                                        modified_variant.push_field(partner_value);
+                                    }
                                 }
                             }
                         }
+                        wtr.write_record(&modified_variant)?;
                     }
                 }
 
-                // TODO: write modified variant?
-                wtr.write_record(&variant)?;
+                if !modified_variant_written {
+                    wtr.write_record(&variant)?;
+                }
             }
         }
     }
@@ -215,9 +221,94 @@ fn get_arg(n: usize) -> Result<OsString, Box<Error>> {
     }
 }
 
+
 fn main() {
-    if let Err(err) = run() {
+    let result_file_path = get_arg(3).unwrap();
+    let partner_file_path = get_arg(2).unwrap();
+    let master_file_path = get_arg(1).unwrap();
+
+    let master_file = File::open(master_file_path).unwrap();
+    let master_rdr = csv::ReaderBuilder::new().flexible(true).from_reader(
+        master_file,
+    );
+
+    let partner_file = File::open(partner_file_path).unwrap();
+    let partner_rdr = csv::ReaderBuilder::new().flexible(true).from_reader(
+        partner_file,
+    );
+
+    let mut wtr = csv::WriterBuilder::new()
+        .flexible(true)
+        .from_path(result_file_path)
+        .unwrap();
+
+
+    if let Err(err) = run(master_rdr, partner_rdr, &mut wtr, true) {
         println!("{}", err);
         process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use csv::{Reader, Writer};
+
+    #[test]
+    fn master_data_is_copied() {
+        let master_data = "\
+_published,sku,Att1
+true,1,hello
+,2,bye
+false,3,name
+,4,name
+";
+        let partner_data = "";
+        let master = Reader::from_reader(master_data.as_bytes());
+        let partner = Reader::from_reader(partner_data.as_bytes());
+        let mut result = Writer::from_writer(vec![]);
+        run(master, partner, &mut result, true).unwrap();
+        let data = String::from_utf8(result.into_inner().unwrap()).unwrap();
+        assert_eq!(data, master_data);
+    }
+
+    #[test]
+    fn do_nothing_if_no_master_data() {
+        let master_data = "_published,sku,Att1\n";
+        let partner_data = "";
+        let master = Reader::from_reader(master_data.as_bytes());
+        let partner = Reader::from_reader(partner_data.as_bytes());
+        let mut result = Writer::from_writer(vec![]);
+        run(master, partner, &mut result, true).unwrap();
+        let data = String::from_utf8(result.into_inner().unwrap()).unwrap();
+        assert_eq!(data, master_data);
+    }
+
+    #[test]
+    fn master_data_is_changed_and_copied() {
+        let master_data = "\
+_published,sku,Att1
+true,1,hello
+,2,bye
+false,3,name
+,4,name
+";
+        let partner_data = "\
+msku,Att1
+2,bye2
+";
+        let expected_data = "\
+_published,sku,Att1
+true,1,hello
+,2,bye2
+false,3,name
+,4,name
+";
+        let master = Reader::from_reader(master_data.as_bytes());
+        let partner = Reader::from_reader(partner_data.as_bytes());
+        let mut result = Writer::from_writer(vec![]);
+        run(master, partner, &mut result, true).unwrap();
+        let data = String::from_utf8(result.into_inner().unwrap()).unwrap();
+        assert_eq!(data, expected_data);
     }
 }
