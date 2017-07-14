@@ -257,7 +257,7 @@ fn main() {
             "<MASTER_FILE> 'CSV export of master project' \n\
              <PARTNER_FILE> 'CSV export of partner project' \n\
              <RESULT_FILE> 'result CSV file' \n\
-            --accept-all=[true|false] 'accepts all changes from partner project'",
+            --accept-all=[true|false] 'accepts all changes from partner project (default: false)'",
         )
         .get_matches();
 
@@ -265,7 +265,7 @@ fn main() {
     let partner_file_path = matches.value_of("PARTNER_FILE").unwrap();
     let result_file_path = matches.value_of("RESULT_FILE").unwrap();
 
-    let accept_all = matches.value_of("accept-all").iter().all(|&a| a == "true");
+    let accept_all = matches.value_of("accept-all").iter().any(|&a| a == "true");
     println!(
         "Merging master export '{}' with partner export '{}' to '{}' (accept-all={})",
         master_file_path,
