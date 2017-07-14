@@ -402,4 +402,50 @@ false,3,name,ghi
 ";
         test_run(master_data, partner_data, expected_data);
     }
+
+    #[test]
+    fn handle_product_with_only_master_variant() {
+        let master_data = "\
+_published,sku,Att1
+true,1,hello
+false,3,name
+,4,name
+";
+        let partner_data = "\
+msku,Att1
+4,bye2
+";
+        // a missing column is shown as a diff, and therefor remove the master value
+        let expected_data = "\
+_published,sku,Att1
+true,1,hello
+false,3,name
+,4,bye2
+";
+        test_run(master_data, partner_data, expected_data);
+    }
+
+    #[test]
+    fn handle_product_with_multiple_variants() {
+        let master_data = "\
+_published,sku,Att1
+true,1,v1
+,2,v2
+,3,v3
+false,4,v4
+";
+        let partner_data = "\
+msku,Att1
+3,v3b
+";
+        // a missing column is shown as a diff, and therefor remove the master value
+        let expected_data = "\
+_published,sku,Att1
+true,1,v1
+,2,v2
+,3,v3b
+false,4,v4
+";
+        test_run(master_data, partner_data, expected_data);
+    }
 }
