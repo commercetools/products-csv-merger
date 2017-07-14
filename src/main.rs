@@ -94,6 +94,43 @@ fn is_master(r: &Record) -> bool {
     !r.get("_published").iter().all(|p| p.is_empty())
 }
 
+fn handle_diff<'a>(
+    master_value: &'a str,
+    partner_value: &'a str,
+    accept_all_changes: bool,
+) -> String {
+    // println!("Master project  : {}", &master_value);
+    // println!("Partner project : {}", &partner_value);
+    display_diff(master_value, partner_value).unwrap();
+
+    let result = if accept_all_changes {
+        String::from(partner_value)
+    } else {
+        loop {
+            println!("(p)artner (default) or (m)aster or (e)dit?");
+            let mut input = String::new();
+            io::stdin().read_line(&mut input).expect(
+                "failed to read line",
+            );
+            match Some(&*input) {
+                Some("p") | Some("\n") => return String::from(partner_value),
+                Some("m") => return String::from(master_value),
+                Some("e") => {
+                    println!("Enter new value:");
+                    let mut new_value = String::new();
+                    io::stdin().read_line(&mut new_value).expect(
+                        "failed to read line",
+                    );
+                    return new_value;
+                }
+                _ => continue,
+            }
+        }
+    };
+    println!();
+    result
+}
+
 fn run<R, W>(
     mut master_rdr: csv::Reader<R>,
     mut partner_rdr: csv::Reader<R>,
@@ -183,15 +220,13 @@ where
                                         sku,
                                         name
                                     );
-                                    // println!("Master project  : {}", &master_value);
-                                    // println!("Partner project : {}", &partner_value);
-                                    display_diff(master_value, partner_value)?;
-                                    println!();
-
-                                    if accept_all_changes {
-                                        modified_variant.push_field(partner_value);
-                                        modified_value_written = true
-                                    }
+                                    let new_value = handle_diff(
+                                        master_value,
+                                        partner_value,
+                                        accept_all_changes,
+                                    );
+                                    modified_variant.push_field(&new_value);
+                                    modified_value_written = true;
                                 }
                             }
                             if !modified_value_written {
@@ -246,7 +281,7 @@ fn main() {
         .unwrap();
 
 
-    if let Err(err) = run(master_rdr, partner_rdr, &mut wtr, true) {
+    if let Err(err) = run(master_rdr, partner_rdr, &mut wtr, false) {
         println!("{}", err);
         process::exit(1);
     }
