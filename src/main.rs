@@ -89,7 +89,7 @@ fn should_compare_key(key: &str) -> bool {
          key != "ValidationMessage" && key != "ValidationException")
 }
 
-fn is_master(r: &Record) -> bool {
+fn is_master_variant(r: &Record) -> bool {
     !r.get("_published").iter().all(|p| p.is_empty())
 }
 
@@ -130,6 +130,24 @@ fn handle_diff<'a>(
     };
     println!();
     result
+}
+
+fn write_record<W>(
+    headers: &StringRecord,
+    r: &Record,
+    wtr: &mut csv::Writer<W>,
+) -> Result<(), Box<Error>>
+where
+    W: std::io::Write,
+{
+
+    let mut to_write = StringRecord::new();
+    let empty_string = String::from("");
+
+    for h in headers.iter() {
+        to_write.push_field(r.get(h).unwrap_or(&empty_string));
+    }
+    Ok(wtr.write_record(&to_write)?)
 }
 
 fn run<R, W>(
@@ -184,65 +202,76 @@ where
     let unknown = String::from("<unknown>");
     let empty_string = String::from("");
 
-    // first one is a master variant
-    if let Some(master_variant) = all_records.next() {
-        let master_variant = master_variant?;
+    let mut master_variant: Option<Record> = None;
+    let mut master_variant_to_write: Option<Record> = None;
+    while let Some(variant) = all_records.next() {
+        let variant = variant?;
+        let variant_record = to_record(&master_headers, &variant);
+        let mut variant_to_write = variant_record.clone();
 
-        // keep track of the last master_record
-        let mut master_record: Record = to_record(&master_headers, &master_variant);
-        wtr.write_record(&master_variant)?;
+        if is_master_variant(&variant_record) {
+            if let Some(m) = master_variant_to_write {
+                write_record(&master_headers, &m, wtr)?;
+            }
+            master_variant_to_write = Some(variant_record.clone());
+            master_variant = Some(variant_record.clone()).clone();
+        } else {
+            // variant
+            if let Some(sku) = variant_record.get("sku") {
+                if let Some(partner) = partner_records.get(sku) {
+                    for key in master_headers.iter() {
+                        let master_value = variant_record.get(key).unwrap_or(&empty_string);
 
-        while let Some(variant) = all_records.next() {
-            let variant = variant?;
-            let variant_record = to_record(&master_headers, &variant);
-
-            if is_master(&variant_record) {
-                // master variant
-                master_record = variant_record;
-                wtr.write_record(&variant)?;
-            } else {
-                // variant
-                let mut modify_variant = false;
-                if let Some(sku) = variant_record.get("sku") {
-                    if let Some(partner) = partner_records.get(sku) {
-                        modify_variant = true;
-                        let mut modified_variant = StringRecord::new();
-                        for key in master_headers.iter() {
-                            let master_value = variant_record.get(key).unwrap_or(&empty_string);
-                            let mut modified_value_written = false;
-                            if should_compare_key(key) {
-                                let partner_value = partner.get(key).unwrap_or(&empty_string);
-                                if master_value != partner_value {
-                                    let master_record = master_record.clone();
-                                    let name = master_record.get("name.de").unwrap_or(&unknown);
-                                    println!(
-                                        "# Key '{}' on product '{}' with name '{}'",
-                                        key,
-                                        sku,
-                                        name
-                                    );
-                                    let new_value = handle_diff(
-                                        master_value,
-                                        partner_value,
-                                        accept_all_changes,
-                                    );
-                                    modified_variant.push_field(&new_value);
-                                    modified_value_written = true;
+                        if should_compare_key(key) {
+                            let partner_value = partner.get(key).unwrap_or(&empty_string);
+                            if master_value != partner_value {
+                                let product_name = if let Some(m) = master_variant.clone() {
+                                    m.get("name.de").map(|n| n.clone()).unwrap_or(
+                                        unknown.clone(),
+                                    )
+                                } else {
+                                    unknown.clone()
+                                };
+                                println!(
+                                    "# Key '{}' on product '{}' with name '{}'",
+                                    key,
+                                    sku,
+                                    product_name
+                                );
+                                let new_value =
+                                    handle_diff(master_value, partner_value, accept_all_changes);
+                                variant_to_write.insert(String::from(key), new_value);
+                            }
+                        } else if key == "name.de" {
+                            if let Some(partner_name) = partner.get("name.de") {
+                                if let Some(master_name) =
+                                    master_variant.clone().and_then(|m| {
+                                        m.get("name.de").map(|n| n.clone())
+                                    })
+                                {
+                                    let new_value =
+                                        handle_diff(&master_name, partner_name, accept_all_changes);
+                                    if let Some(mut m) = master_variant_to_write.take() {
+                                        m.insert(String::from("name.de"), new_value);
+                                        master_variant_to_write = Some(m);
+                                    }
                                 }
                             }
-                            if !modified_value_written {
-                                modified_variant.push_field(master_value);
-                            }
                         }
-                        wtr.write_record(&modified_variant)?;
                     }
                 }
-
-                if !modify_variant {
-                    wtr.write_record(&variant)?;
-                }
             }
+
+            // write the master variant before the variants if needed
+            if let Some(m) = master_variant_to_write {
+                write_record(&master_headers, &m, wtr)?;
+                master_variant_to_write = None;
+            }
+            write_record(&master_headers, &variant_to_write, wtr)?;
         }
+    }
+    if let Some(m) = master_variant_to_write {
+        write_record(&master_headers, &m, wtr)?;
     }
 
     wtr.flush()?;
@@ -323,10 +352,10 @@ mod tests {
 
     #[test]
     fn test_is_master() {
-        assert_eq!(is_master(&(map!{ "_published" => "true" })), true);
-        assert_eq!(is_master(&(map!{ "_published" => "false" })), true);
-        assert_eq!(is_master(&(map!{ "_published" => "" })), false);
-        assert_eq!(is_master(&(map!{ "hello" => "" })), false);
+        assert_eq!(is_master_variant(&(map!{ "_published" => "true" })), true);
+        assert_eq!(is_master_variant(&(map!{ "_published" => "false" })), true);
+        assert_eq!(is_master_variant(&(map!{ "_published" => "" })), false);
+        assert_eq!(is_master_variant(&(map!{ "hello" => "" })), false);
     }
 
     fn test_run(master_data: &str, partner_data: &str, expected: &str) {
@@ -438,7 +467,6 @@ false,3,name
 msku,Att1
 4,bye2
 ";
-        // a missing column is shown as a diff, and therefor remove the master value
         let expected_data = "\
 _published,sku,Att1
 true,1,hello
@@ -461,13 +489,35 @@ false,4,v4
 msku,Att1
 3,v3b
 ";
-        // a missing column is shown as a diff, and therefor remove the master value
         let expected_data = "\
 _published,sku,Att1
 true,1,v1
 ,2,v2
 ,3,v3b
 false,4,v4
+";
+        test_run(master_data, partner_data, expected_data);
+    }
+
+    #[test]
+    fn update_product_name() {
+        let master_data = "\
+_published,sku,name.de
+true,1,v1
+,2,
+false,3,v2
+,4,
+";
+        let partner_data = "\
+msku,name.de
+2,v1b
+";
+        let expected_data = "\
+_published,sku,name.de
+true,1,v1b
+,2,
+false,3,v2
+,4,
 ";
         test_run(master_data, partner_data, expected_data);
     }
