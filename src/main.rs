@@ -255,8 +255,11 @@ where
                                             key,
                                             sku
                                         );
-                                        let new_value =
-                                            handle_diff(&master_name, partner_name, accept_all_changes);
+                                        let new_value = handle_diff(
+                                            &master_name,
+                                            partner_name,
+                                            accept_all_changes,
+                                        );
                                         if let Some(mut m) = master_variant_to_write.take() {
                                             m.insert(String::from("name.de"), new_value);
                                             master_variant_to_write = Some(m);
