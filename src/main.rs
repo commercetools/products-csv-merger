@@ -173,12 +173,6 @@ where
             let sku = record.get("msku").expect("msku column not found").clone();
             record.insert(String::from("sku"), sku.clone());
 
-            let description_exists = record.get("description.de").is_some();
-            if description_exists {
-                let description = record.get("description.de").unwrap().clone();
-                record.insert(String::from("PartnerDescription.de"), description);
-            }
-
             (sku, record)
         })
         .collect();
@@ -242,7 +236,7 @@ where
                                     handle_diff(master_value, partner_value, accept_all_changes);
                                 variant_to_write.insert(String::from(key), new_value);
                             }
-                        } else if key == "name.de" {
+                        } else if key == "name.de" || key == "description.de" {
                             if let Some(partner_name) = partner.get("name.de") {
                                 if let Some(master_name) =
                                     master_variant.clone().and_then(|m| {
@@ -428,7 +422,7 @@ false,3,name
 ,4,name
 ";
         let partner_data = "\
-msku,description.de
+msku,PartnerDescription.de
 2,bye2
 ";
         let expected_data = "\
@@ -511,6 +505,29 @@ false,4,v4
 
     #[test]
     fn update_product_name() {
+        let master_data = "\
+_published,sku,name.de
+true,1,v1
+,2,
+false,3,v2
+,4,
+";
+        let partner_data = "\
+msku,name.de
+2,v1b
+";
+        let expected_data = "\
+_published,sku,name.de
+true,1,v1b
+,2,
+false,3,v2
+,4,
+";
+        test_run(master_data, partner_data, expected_data);
+    }
+
+    #[test]
+    fn update_product_description() {
         let master_data = "\
 _published,sku,name.de
 true,1,v1
