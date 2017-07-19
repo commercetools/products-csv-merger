@@ -234,7 +234,11 @@ where
                                 );
                                 let new_value =
                                     handle_diff(master_value, partner_value, accept_all_changes);
-                                variant_to_write.insert(String::from(key), new_value);
+                                variant_to_write.insert(String::from(key), new_value.clone());
+                                if let Some(mut m) = master_variant_to_write.take() {
+                                    m.insert(String::from(key), new_value);
+                                    master_variant_to_write = Some(m);
+                                }
                             }
                         } else if key == "name.de" || key == "description.de" {
                             if let Some(partner_name) = partner.get("name.de") {
@@ -404,7 +408,7 @@ msku,Att1
 ";
         let expected_data = "\
 _published,sku,Att1
-true,1,hello
+true,1,bye2
 ,2,bye2
 false,3,name
 ,4,name
@@ -427,7 +431,7 @@ msku,PartnerDescription.de
 ";
         let expected_data = "\
 _published,sku,PartnerDescription.de
-true,1,hello
+true,1,bye2
 ,2,bye2
 false,3,name
 ,4,name
@@ -451,7 +455,7 @@ msku,Att1
         // a missing column is shown as a diff, and therefor remove the master value
         let expected_data = "\
 _published,sku,Att1,Att2
-true,1,hello,abc
+true,1,bye2,
 ,2,bye2,
 false,3,name,ghi
 ,4,name,klm
@@ -474,31 +478,8 @@ msku,Att1
         let expected_data = "\
 _published,sku,Att1
 true,1,hello
-false,3,name
+false,3,bye2
 ,4,bye2
-";
-        test_run(master_data, partner_data, expected_data);
-    }
-
-    #[test]
-    fn handle_product_with_multiple_variants() {
-        let master_data = "\
-_published,sku,Att1
-true,1,v1
-,2,v2
-,3,v3
-false,4,v4
-";
-        let partner_data = "\
-msku,Att1
-3,v3b
-";
-        let expected_data = "\
-_published,sku,Att1
-true,1,v1
-,2,v2
-,3,v3b
-false,4,v4
 ";
         test_run(master_data, partner_data, expected_data);
     }
