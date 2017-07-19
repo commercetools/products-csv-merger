@@ -245,15 +245,15 @@ where
                                 }
                             }
                         } else if key == "name.de" || key == "description.de" {
-                            if let Some(partner_name) = partner.get("name.de") {
+                            if let Some(partner_name) = partner.get(key) {
                                 if let Some(master_name) =
                                     master_variant.clone().and_then(|m| {
-                                        m.get("name.de").map(|n| n.clone())
+                                        m.get(key).map(|n| n.clone())
                                     })
                                 {
                                     if *partner_name != master_name {
                                         println!(
-                                            "# Key '{}' on product '{}' (name changed)",
+                                            "# Key '{}' on product '{}' changed",
                                             key,
                                             sku
                                         );
@@ -263,7 +263,7 @@ where
                                             accept_all_changes,
                                         );
                                         if let Some(mut m) = master_variant_to_write.take() {
-                                            m.insert(String::from("name.de"), new_value);
+                                            m.insert(String::from(key), new_value);
                                             master_variant_to_write = Some(m);
                                         }
                                     }
@@ -514,18 +514,18 @@ false,3,v2
     #[test]
     fn update_product_description() {
         let master_data = "\
-_published,sku,name.de
+_published,sku,description.de
 true,1,v1
 ,2,
 false,3,v2
 ,4,
 ";
         let partner_data = "\
-msku,name.de
+msku,description.de
 2,v1b
 ";
         let expected_data = "\
-_published,sku,name.de
+_published,sku,description.de
 true,1,v1b
 ,2,
 false,3,v2
