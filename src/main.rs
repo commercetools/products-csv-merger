@@ -247,16 +247,12 @@ where
                         } else if key == "name.de" {
                             if let Some(partner_name) = partner.get(key) {
                                 if let Some(master_name) =
-                                    master_variant.clone().and_then(|m| {
-                                        m.get(key).map(|n| n.clone())
-                                    })
+                                    master_variant.clone().and_then(
+                                        |m| m.get(key).map(|n| n.clone()),
+                                    )
                                 {
                                     if *partner_name != master_name {
-                                        println!(
-                                            "# Key '{}' on product '{}' changed",
-                                            key,
-                                            sku
-                                        );
+                                        println!("# Key '{}' on product '{}' changed", key, sku);
                                         let new_value = handle_diff(
                                             &master_name,
                                             partner_name,
