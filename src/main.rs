@@ -217,27 +217,31 @@ where
                         let master_value = variant_record.get(key).unwrap_or(&empty_string);
 
                         if should_compare_key(key) {
-                            let partner_value = partner.get(key).unwrap_or(&empty_string);
-                            if master_value != partner_value {
-                                let product_name = if let Some(m) = master_variant.clone() {
-                                    m.get("name.de").map(|n| n.clone()).unwrap_or(
-                                        unknown.clone(),
-                                    )
-                                } else {
-                                    unknown.clone()
-                                };
-                                println!(
-                                    "# Key '{}' on product '{}' with name '{}'",
-                                    key,
-                                    sku,
-                                    product_name
-                                );
-                                let new_value =
-                                    handle_diff(master_value, partner_value, accept_all_changes);
-                                variant_to_write.insert(String::from(key), new_value.clone());
-                                if let Some(mut m) = master_variant_to_write.take() {
-                                    m.insert(String::from(key), new_value);
-                                    master_variant_to_write = Some(m);
+                            if let Some(partner_value) = partner.get(key) {
+                                if master_value != partner_value {
+                                    let product_name = if let Some(m) = master_variant.clone() {
+                                        m.get("name.de").map(|n| n.clone()).unwrap_or(
+                                            unknown.clone(),
+                                        )
+                                    } else {
+                                        unknown.clone()
+                                    };
+                                    println!(
+                                        "# Key '{}' on product '{}' with name '{}'",
+                                        key,
+                                        sku,
+                                        product_name
+                                    );
+                                    let new_value = handle_diff(
+                                        master_value,
+                                        partner_value,
+                                        accept_all_changes,
+                                    );
+                                    variant_to_write.insert(String::from(key), new_value.clone());
+                                    if let Some(mut m) = master_variant_to_write.take() {
+                                        m.insert(String::from(key), new_value);
+                                        master_variant_to_write = Some(m);
+                                    }
                                 }
                             }
                         } else if key == "name.de" || key == "description.de" {
@@ -452,11 +456,11 @@ false,3,name,ghi
 msku,Att1
 2,bye2
 ";
-        // a missing column is shown as a diff, and therefor remove the master value
+        // a missing column is ignored
         let expected_data = "\
 _published,sku,Att1,Att2
-true,1,bye2,
-,2,bye2,
+true,1,bye2,abc
+,2,bye2,def
 false,3,name,ghi
 ,4,name,klm
 ";
