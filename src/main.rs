@@ -276,6 +276,7 @@ where
                 master_variant_to_write = None;
             }
             write_record(&master_headers, &variant_to_write, wtr)?;
+            wtr.flush()?;
         }
     }
     if let Some(m) = master_variant_to_write {
