@@ -244,7 +244,7 @@ where
                                     }
                                 }
                             }
-                        } else if key == "name.de" {
+                        } else if key == "name.de" || key == "description.de" {
                             if let Some(partner_name) = partner.get(key) {
                                 if let Some(master_name) =
                                     master_variant.clone().and_then(
@@ -508,7 +508,7 @@ false,3,v2
     }
 
     #[test]
-    fn not_update_product_description() {
+    fn update_product_description() {
         let master_data = "\
 _published,sku,description.de
 true,1,v1
@@ -522,7 +522,7 @@ msku,description.de
 ";
         let expected_data = "\
 _published,sku,description.de
-true,1,v1
+true,1,v1b
 ,2,
 false,3,v2
 ,4,
