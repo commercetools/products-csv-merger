@@ -122,7 +122,7 @@ fn handle_diff<'a>(
                     io::stdin().read_line(&mut new_value).expect(
                         "failed to read line",
                     );
-                    return new_value;
+                    break new_value;
                 }
                 _ => continue,
             }
